@@ -11,7 +11,9 @@ namespace GuitarChordFinder
 
     public partial class GuitarChordFinder : Form
     {
-        private int root = -1;      //root neboli zakladni ton akordu
+		private static readonly string[] NOTES = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "B", "H" };
+
+		private int root = -1;      //root neboli zakladni ton akordu
         private bool isPainting;      //udava, zda jiz byl ci nebyl vykreslen nejaky diagram - pokud je true, zmeny napr. v ladeni se projevi okamzite
         private List<ChordFormula> knownFormulas = new List<ChordFormula>();
         List<int[]> evaluatedFingerings = new List<int[]>();
@@ -396,7 +398,7 @@ namespace GuitarChordFinder
                 }
                 else
                 {
-                    noteLabels[i] = Note.getName((fingering[i] + Fretboard.GetTuning(i)) % 12);
+                    noteLabels[i] = NOTES[(fingering[i] + Fretboard.GetTuning(i)) % 12];
                     intervalLabels[i] = intervalSymbols[(fingering[i] + Fretboard.GetTuning(i)) % 12];
                 }
             }
@@ -587,19 +589,7 @@ namespace GuitarChordFinder
             }
         }
     }
-    
 
-
-    public static class Note
-    {
-        //pomocna trida obsahujici nazvy tonu
-        private static string[] NOTE = new string[12] { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "B", "H" };
-
-        public static string getName(int index)
-        {
-            return NOTE[index];
-        }
-    }
 
     public static class Fretboard
         //staticka trida implementujici abstraktni konstrukci Hmatnik a funkce s nim spojene
