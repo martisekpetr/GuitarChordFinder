@@ -8,122 +8,130 @@ using System.IO;
 
 namespace GuitarChordFinder
 {
+	public enum Note { C, Cs, D, Ds, E, F, Fs, G, Gs, A, As, B, None = -1 }
 
-    public partial class GuitarChordFinder : Form
+	public partial class GuitarChordFinder : Form
     {
-		private static readonly string[] NOTES = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "B", "H" };
-
-		private int root = -1;      //root neboli zakladni ton akordu
-        private bool isPainting;      //udava, zda jiz byl ci nebyl vykreslen nejaky diagram - pokud je true, zmeny napr. v ladeni se projevi okamzite
-        private List<ChordFormula> knownFormulas = new List<ChordFormula>();
-        List<int[]> evaluatedFingerings = new List<int[]>();
-        string[] intervalSymbols = new string[12];       //symbolicke znacky intervalu, slouzi pro vypis
+		static readonly string[] NOTES = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "B", "H" };
+		const int MAX_FRET = 15;
+		const int STRINGS_COUNT = 6;
+		const int MAX_SPAN = 3;
+		static readonly Note[] DEFAULT_TUNING = { Note.E, Note.A, Note.D, Note.G, Note.B, Note.E }; //default je standardni ladeni EADGHe
+		
+		Note root = Note.None;      //root neboli zakladni ton akordu
+        bool isPainting;      //udava, zda jiz byl ci nebyl vykreslen nejaky diagram - pokud je true, zmeny napr. v ladeni se projevi okamzite
+        List<ChordFormula> knownFormulas = new List<ChordFormula>();
         CheckBox[] checkbox = new CheckBox[12];    //pomocne pole pro zjednoduseni prace s checkboxy
+		Fretboard fretboard = new Fretboard(MAX_FRET, STRINGS_COUNT, DEFAULT_TUNING);
 
-        public GuitarChordFinder()
-        {
-            //inicializace komponent - standardni ladeni, akord C dur
-            InitializeComponent();
-            checkbox[0] = checkC;
-            checkbox[1] = checkCs;
-            checkbox[2] = checkD;
-            checkbox[3] = checkDs;
-            checkbox[4] = checkE;
-            checkbox[5] = checkF;
-            checkbox[6] = checkFs;
-            checkbox[7] = checkG;
-            checkbox[8] = checkGs;
-            checkbox[9] = checkA;
-            checkbox[10] = checkAs;
-            checkbox[11] = checkB;
-            comboRoot.SelectedIndex = 0;
-            groupChordStructure.Enabled = false;
-            groupChordNotes.Enabled = false;
-            comboThird.SelectedIndex = 3;
-            comboFifth.SelectedIndex = 2;
-            comboSeventh.SelectedIndex = 0;
-            comboNinth.SelectedIndex = 0;
-            comboEleventh.SelectedIndex = 0;
-            comboThirteenth.SelectedIndex = 0;
-            UDTuning1.SelectedIndex = 11 - Fretboard.GetTuning(0);
-            UDTuning2.SelectedIndex = 11 - Fretboard.GetTuning(1);
-            UDTuning3.SelectedIndex = 11 - Fretboard.GetTuning(2);
-            UDTuning4.SelectedIndex = 11 - Fretboard.GetTuning(3);
-            UDTuning5.SelectedIndex = 11 - Fretboard.GetTuning(4);
-            UDTuning6.SelectedIndex = 11 - Fretboard.GetTuning(5);
-            
-            
-            List<string> knownFormulasNames = new List<string>();
-            
-            //nacteni znamych schemat ze souboru
-            StreamReader formulasReader = new StreamReader("schemata.in");
-            while (!formulasReader.EndOfStream)
-            {
-                string row = formulasReader.ReadLine();
-                string[] s_items = row.Split(';');
-                int[] items = new int[s_items.Length];
-                for (int i = 1; i < s_items.Length; i++)
-                {
-                    items[i] = Int16.Parse(s_items[i]);
-                }
+		/// <summary>
+		/// Initializes GUI components to show default tuning and C major chord. Loads known chord formulas from file.
+		/// </summary>
+		public GuitarChordFinder()
+		{
+			InitializeComponent();
+			checkbox[0] = checkC;
+			checkbox[1] = checkCs;
+			checkbox[2] = checkD;
+			checkbox[3] = checkDs;
+			checkbox[4] = checkE;
+			checkbox[5] = checkF;
+			checkbox[6] = checkFs;
+			checkbox[7] = checkG;
+			checkbox[8] = checkGs;
+			checkbox[9] = checkA;
+			checkbox[10] = checkAs;
+			checkbox[11] = checkB;
+			comboRoot.SelectedIndex = 0;
+			groupChordStructure.Enabled = false;
+			groupChordNotes.Enabled = false;
+			comboThird.SelectedIndex = 3;
+			comboFifth.SelectedIndex = 2;
+			comboSeventh.SelectedIndex = 0;
+			comboNinth.SelectedIndex = 0;
+			comboEleventh.SelectedIndex = 0;
+			comboThirteenth.SelectedIndex = 0;
+			UDTuning1.SelectedIndex = 11 - (int)fretboard.GetTuning(0);
+			UDTuning2.SelectedIndex = 11 - (int)fretboard.GetTuning(1);
+			UDTuning3.SelectedIndex = 11 - (int)fretboard.GetTuning(2);
+			UDTuning4.SelectedIndex = 11 - (int)fretboard.GetTuning(3);
+			UDTuning5.SelectedIndex = 11 - (int)fretboard.GetTuning(4);
+			UDTuning6.SelectedIndex = 11 - (int)fretboard.GetTuning(5);
 
-                knownFormulas.Add(new ChordFormula(s_items[0], items[1], items[2], items[3], items[4], items[5], items[6]));
-                knownFormulasNames.Add(s_items[0]);
-            }
-            formulasReader.Close();
 
+			List<string> knownFormulasNames = new List<string>();
+
+			// load known chord formulas from file
+			using (StreamReader formulasReader = new StreamReader("schemata.in")) {
+				string line;
+				while ((line = formulasReader.ReadLine()) != null)
+				{
+					string[] s_items = line.Split(';');
+					int[] items = new int[s_items.Length];
+
+					for (int i = 1; i < s_items.Length; i++)
+					{
+						int val;
+						items[i] = int.TryParse(s_items[i], out val) ? val : 0;
+					}
+					knownFormulas.Add(new ChordFormula(s_items[0], items[1], items[2], items[3], items[4], items[5], items[6]));
+					knownFormulasNames.Add(s_items[0]);
+				}
+			} 
+            
             comboChordName.DataSource = knownFormulasNames;
         }
 
-        private void btnFind_Click(object sender, EventArgs e)
-        {   //spoustec cele masinerie - generovani prstokladu, vykreslovani atd.
- 
-            if (root > -1)
-            {
-                //nastaveni ladeni podle uzivatelem vybranych hodnot, popr. i "umisteni kapodastru"
-                Fretboard.SetTuning(0, 11 - (UDTuning1.SelectedIndex % 12) + (int)capoLocation.Value);
-                Fretboard.SetTuning(1, 11 - (UDTuning2.SelectedIndex % 12) + (int)capoLocation.Value);
-                Fretboard.SetTuning(2, 11 - (UDTuning3.SelectedIndex % 12) + (int)capoLocation.Value);
-                Fretboard.SetTuning(3, 11 - (UDTuning4.SelectedIndex % 12) + (int)capoLocation.Value);
-                Fretboard.SetTuning(4, 11 - (UDTuning5.SelectedIndex % 12) + (int)capoLocation.Value);
-                Fretboard.SetTuning(5, 11 - (UDTuning6.SelectedIndex % 12) + (int)capoLocation.Value);
 
-                //vytvoreni instance tridy Akord
-                Chord currentChord = new Chord
-                    (
-                    new List<int>(), 
-                    root, 
-                    comboThird.SelectedIndex, 
-                    comboFifth.SelectedIndex, 
-                    comboSeventh.SelectedIndex, 
-                    comboNinth.SelectedIndex, 
-                    comboEleventh.SelectedIndex, 
-                    comboThirteenth.SelectedIndex, 
-                    comboBass.SelectedIndex, 
-                    checkOmitRoot.Checked
-                    );
-               
-                //pridani tonu pouzitych v akordu do instance aktualniAkord
-                for (int i = 0; i < 12; i++)
-                {
-                    if (checkbox[i].Checked)
-                        currentChord.Notes.Add(i);
-                }
-                
-                //vygenerovani hratelnych prstokladu
-                List<int[]> feasibleFingerings = currentChord.findFingerings();
-                
-                //ohodnoceni a setrideni nalezenych prstokladu
-                evaluatedFingerings = currentChord.evaluateFingerings(ref feasibleFingerings);
+		/// <summary>
+		/// Finds suitable fingerings for given chord, evaluates, sorts and displays them.
+		/// </summary>
+		private void findChordFingerings() {
+			if (root != Note.None)
+			{
+				// change fretboard tuning according to user defined values
+				fretboard.SetTuning(0, (Note)(11 - (UDTuning1.SelectedIndex % 12) + (int)capoLocation.Value));
+				fretboard.SetTuning(1, (Note)(11 - (UDTuning2.SelectedIndex % 12) + (int)capoLocation.Value));
+				fretboard.SetTuning(2, (Note)(11 - (UDTuning3.SelectedIndex % 12) + (int)capoLocation.Value));
+				fretboard.SetTuning(3, (Note)(11 - (UDTuning4.SelectedIndex % 12) + (int)capoLocation.Value));
+				fretboard.SetTuning(4, (Note)(11 - (UDTuning5.SelectedIndex % 12) + (int)capoLocation.Value));
+				fretboard.SetTuning(5, (Note)(11 - (UDTuning6.SelectedIndex % 12) + (int)capoLocation.Value));
 
-                //vygenerovani znacek pro vypis
-                intervalSymbols = currentChord.generateSymbols();
-                
-                outputFingerings();
-            }
-        }
+				// construct a Chord instance from the input values
+				Chord currentChord = new Chord
+					(
+					new HashSet<Note>(),
+					root,
+					comboThird.SelectedIndex,
+					comboFifth.SelectedIndex,
+					comboSeventh.SelectedIndex,
+					comboNinth.SelectedIndex,
+					comboEleventh.SelectedIndex,
+					comboThirteenth.SelectedIndex,
+					(Note) comboBass.SelectedIndex,
+					checkOmitRoot.Checked
+					);
 
-        private void outputFingerings()
+				for (int i = 0; i < 12; i++)
+				{
+					if (checkbox[i].Checked)
+						currentChord.Notes.Add((Note)i);
+				}
+
+				// generate all possible fingerings
+				List<int[]> feasibleFingerings = findFingerings(currentChord);
+
+				// evaluate and sort the fingerings
+				List<int[]> sortedFingerings = sortFingerings(currentChord, feasibleFingerings);
+
+				//vygenerovani znacek pro vypis
+				Dictionary<Note, string> intervalSymbols = generateHarmonicFunctionSymbols(currentChord);
+
+				outputFingerings(intervalSymbols);
+			}
+		}
+		       
+        private void outputFingerings(Dictionary<Note, string> intervalSymbols)
         {
             //vypise nalezene prstoklady do ListBoxu
             
@@ -132,7 +140,7 @@ namespace GuitarChordFinder
             {
                 StringBuilder item = new StringBuilder();
                 int[] currentFingering = evaluatedFingerings[i];
-                for (int j = 0; j < Fretboard.StringsCount; j++)
+                for (int j = 0; j < fretboard.StringsCount; j++)
                 {
                     if (currentFingering[j] == -1)
                         item.Append(" X ");
@@ -150,7 +158,7 @@ namespace GuitarChordFinder
                         }
                         
 
-                    if (j < Fretboard.StringsCount - 1)
+                    if (j < fretboard.StringsCount - 1)
                         item.Append("|");  
                 }
                 items.Add(item.ToString());
@@ -160,7 +168,7 @@ namespace GuitarChordFinder
             //vykresli prvni diagram
             if (evaluatedFingerings.Count > 0)
             {
-                repaintDiagram(evaluatedFingerings[0], ref intervalSymbols);
+                repaintDiagram(evaluatedFingerings[0], intervalSymbols);
             }
         }
 
@@ -278,7 +286,7 @@ namespace GuitarChordFinder
             return true;
         }
 
-        private void repaintDiagram(int[] fingering, ref string[] intervalSymbols)
+        private void repaintDiagram(int[] fingering, Dictionary<Note, string> intervalSymbols)
         {
             isPainting = true;
             Graphics grafika = picBoxFretboard.CreateGraphics();
@@ -323,15 +331,15 @@ namespace GuitarChordFinder
             }
 
             //vykresleni bare (bare = skupina not, ktere jsou v prstokladu na stejnem prazci a lze je tedy hrat jednim prstem polozenym pres vice strun (vetsinou ukazovak)
-            if (fingering[Fretboard.StringsCount - 1] > 0) //posledni struna neni prazdna, potencialne existuje bare
+            if (fingering[fretboard.StringsCount - 1] > 0) //posledni struna neni prazdna, potencialne existuje bare
             {
-                int barreFret = fingering[Fretboard.StringsCount - 1];
+                int barreFret = fingering[fretboard.StringsCount - 1];
                 List<int> barreStrings = new List<int>();
-                barreStrings.Add(Fretboard.StringsCount - 1);
+                barreStrings.Add(fretboard.StringsCount - 1);
                 bool endOfBarre = false;
                 try
                 {
-                    for (int i = Fretboard.StringsCount - 2; i >= 0; i--)  //postupujeme od vyssich strun k basovym (bare muze byt i castecne, napr pouze pres ctyri struny
+                    for (int i = fretboard.StringsCount - 2; i >= 0; i--)  //postupujeme od vyssich strun k basovym (bare muze byt i castecne, napr pouze pres ctyri struny
                     {                                                       
                         if (endOfBarre)
                         {
@@ -387,8 +395,8 @@ namespace GuitarChordFinder
             }
 
             //vypsani popisku pod diagramem (na jednom radku konkretni tony, na druhem jejich harmonicke funkce v aktualnim akordu)
-            string[] noteLabels = new string[Fretboard.StringsCount];
-            string[] intervalLabels = new string[Fretboard.StringsCount];
+            string[] noteLabels = new string[fretboard.StringsCount];
+            string[] intervalLabels = new string[fretboard.StringsCount];
             for (int i = 0; i < fingering.Length; i++)
             {
                 if (fingering[i] == -1)
@@ -398,8 +406,8 @@ namespace GuitarChordFinder
                 }
                 else
                 {
-                    noteLabels[i] = NOTES[(fingering[i] + Fretboard.GetTuning(i)) % 12];
-                    intervalLabels[i] = intervalSymbols[(fingering[i] + Fretboard.GetTuning(i)) % 12];
+                    noteLabels[i] = NOTES[(fingering[i] + (int)fretboard.GetTuning(i)) % 12];
+                    intervalLabels[i] = intervalSymbols[(Note)((fingering[i] + (int)fretboard.GetTuning(i)) % 12)];
                 }
             }
             labelString1.Text = noteLabels[0];
@@ -456,7 +464,7 @@ namespace GuitarChordFinder
         private void comboRoot_SelectedIndexChanged(object sender, EventArgs e)
         {
             comboBass.SelectedIndex = comboRoot.SelectedIndex;
-            root = comboRoot.SelectedIndex;
+            root = (Note)comboRoot.SelectedIndex;
             if (radioChordNotes.Checked == false)
                 { updateCheckboxes(); }
         }
@@ -548,8 +556,8 @@ namespace GuitarChordFinder
 
             if (isPainting)
             {
-                //zmena ladeni vyvola okamzite prepsani diagramu -> "klikne" na  tlacitko 'Generuj'
-                btnFind_Click(upDown, new EventArgs());
+				//zmena ladeni vyvola okamzite prepsani diagramu -> "klikne" na  tlacitko 'Generuj'
+				findChordFingerings();
             }
         }
 
@@ -580,54 +588,442 @@ namespace GuitarChordFinder
                 btnPrevious.Enabled = true;
         }
 
-        private void capoUpDown_ValueChanged(object sender, EventArgs e)
-        {
-            if (isPainting)
-            {
-                //"umisteni kapodastru" vyvola okamzite prepsani diagramu -> "klikne" na  tlacitko 'Generuj'
-                btnFind_Click(sender, new EventArgs());
-            }
-        }
-    }
+
+		/// <summary>
+		/// For each of the 12 notes, return the symbol of a harmonic function this note fulfills in the chord.
+		/// </summary>
+		/// <returns>Dictionary with 12 entries containing the symbols of the harmonic functions of individual notes. If the note is not present in chord, the corresponding value is empty string.</returns>
+		public Dictionary<Note, string> generateHarmonicFunctionSymbols(Chord chord)
+		{
+			var symbols = new Dictionary<Note, string>();
+
+			symbols[chord.Root] = "R";
+
+			// The order of assigning is IMPORTANT!
+			// Same note can serve as different harmonic functions, e.g. major ninth and diminished third.
+			// In case of such collision, the more important function will overwrite the other one (e.g. third will overwrite ninth).
+
+			switch (chord.Ninth)
+			{
+				case 0: break;
+				case 1:
+					symbols[(Note)(((int)chord.Root + 1) % 12)] = "9b";
+					break;
+				case 2:
+					symbols[(Note)(((int)chord.Root + 2) % 12)] = "9";
+					break;
+				default:
+					break;
+			}
+			switch (chord.Eleventh)
+			{
+				case 0: break;
+				case 1:
+					symbols[(Note)(((int)chord.Root + 5) % 12)] = "11";
+					break;
+				case 2:
+					symbols[(Note)(((int)chord.Root + 6) % 12)] = "11#";
+					break;
+				default:
+					break;
+			}
+			switch (chord.Thirteenth)
+			{
+				case 0: break;
+				case 1:
+					symbols[(Note)(((int)chord.Root + 8) % 12)] = "13b";
+					break;
+				case 2:
+					symbols[(Note)(((int)chord.Root + 9) % 12)] = "13";
+					break;
+				default:
+					break;
+			}
+			switch (chord.Third)
+			{
+				case 0: break;
+				case 1:
+					symbols[(Note)(((int)chord.Root + 2) % 12)] = "2";
+					break;
+				case 2:
+					symbols[(Note)(((int)chord.Root + 3) % 12)] = "m3";
+					break;
+				case 3:
+					symbols[(Note)(((int)chord.Root + 4) % 12)] = "3";
+					break;
+				case 4:
+					symbols[(Note)(((int)chord.Root + 5) % 12)] = "4";
+					break;
+				default:
+					break;
+			}
+			switch (chord.Fifth)
+			{
+				case 0: break;
+				case 1:
+					symbols[(Note)(((int)chord.Root + 6) % 12)] = "5b";
+					break;
+				case 2:
+					symbols[(Note)(((int)chord.Root + 7) % 12)] = "5";
+					break;
+				case 3:
+					symbols[(Note)(((int)chord.Root + 8) % 12)] = "5#";
+					break;
+				default:
+					break;
+			}
+			switch (chord.Seventh)
+			{
+				case 0: break;
+				case 1:
+					symbols[(Note)(((int)chord.Root + 9) % 12)] = "6";
+					break;
+				case 2:
+					symbols[(Note)(((int)chord.Root + 10) % 12)] = "7";
+					break;
+				case 3:
+					symbols[(Note)(((int)chord.Root + 11) % 12)] = "M7";
+					break;
+				default:
+					break;
+			}
+			if (symbols[chord.Bass] == null)
+			{
+				// if the bass tone does not fulfill any other harmonic function, it is assigned its own symbol
+				symbols[chord.Bass] = "(B)";
+			}
+
+			return symbols;
+		}
 
 
-    public static class Fretboard
-        //staticka trida implementujici abstraktni konstrukci Hmatnik a funkce s nim spojene
+		public List<int[]> findFingerings(Chord chord)
+		{
+			// positions of chord tones on the fretboard
+			List<List<int>> notesOnFretboard = fretboard.findNotesOnFretboard(chord.Notes);
+			// positions of the bass tone on the fretboard
+			List<List<int>> bassOnFretboard = fretboard.findNotesOnFretboard(new HashSet<Note>(){ chord.Bass });
+
+			// initialize recursive variables
+			int[] currentFingering = new int[fretboard.StringsCount];
+			List<int[]> fingerings = new List<int[]>();
+			int bassOnString = 0;
+
+			// call the recursive function
+			nextString(notesOnFretboard, bassOnFretboard, ref bassOnString, fingerings, 0, currentFingering);
+			return fingerings;
+		}
+
+		private void nextString(List<List<int>> notesOnFretboard, List<List<int>> bassesOnFretboard, ref int bassOnString, List<int[]> fingerings, int currentString, int[] currentFingering)
+		{
+			// first look for the bass note; only switch after it has been found
+			List<List<int>> onFretboard = bassesOnFretboard;
+			if (bassOnString < currentString)
+				onFretboard = notesOnFretboard;
+
+
+			bool found = false;
+
+			for (int i = 0; i < onFretboard[currentString].Count() + 1; i++)
+			{
+				// jeden cyklus navic pro pripad, ze nebyla nalezena vhodna pozice na aktualni strune - tj. 
+				// ve vhodne vzdalenosti - v takovem pripade je povoleno zatlumeni struny (pozn.: pro prvni dve struny
+				//je zatlumeni povoleno defaultne)
+				if (i == onFretboard[currentString].Count())
+				{
+					if (found == false)
+					{
+						currentFingering[currentString] = -1;
+						if (bassOnString == currentString)
+						{
+							//pokud se hledal bas a nenasel se, jeho hledani se presouva na dalsi strunu
+							bassOnString = currentString + 1;
+						}
+					}
+					else
+					{ break; }
+				}
+				else
+				{
+					//pridame do prstokladu na aktualni pozici vybrany ton
+					currentFingering[currentString] = onFretboard[currentString][i];
+
+					if (currentFingering[currentString] == -1)
+					{
+						//nasel se vhodny ton, ale je to -1 tzn. zatlumena nota - hledani basu se presouva o strunu vys
+						//toto nastane pouze u prvnich dvou strun, kde je zatlumeni povoleno explicitne, u ostatnich jen
+						//v pripade, ktery je osetren o par radek vyse
+						if (bassOnString == currentString)
+						{
+							bassOnString = currentString + 1;
+						}
+					}
+				}
+
+				if (isFeasible(currentFingering, currentString))
+				// prorezavani stromu - v prohledavani vetve se pokracuje
+				//jen tehdy, pokud akord stale jeste dava smysl
+				{
+					found = true;
+					if (currentString < fretboard.StringsCount - 1)
+					{
+						//rekurzivni volani funkce pro dalsi strunu
+						nextString(ref notesOnFretboard, ref bassesOnFretboard, ref bassOnString, ref fingerings, currentString + 1, ref currentFingering);
+					}
+					else
+					//posledni struna, nasli jsme smysluplny prstoklad
+					{
+						//test na obsazeni vsech tonu akordu
+						if (containsAllNecessaryNotes(chord, currentFingering))
+						{
+							//pridani tonu do seznamu prstokladu
+							int[] fingering_copy = new int[fretboard.StringsCount]; //nemohu pridat referencne predavanou prommenou, musim vytvorit kopii
+							for (int j = 0; j < fretboard.StringsCount; j++)
+							{ fingering_copy[j] = currentFingering[j]; }
+
+							fingerings.Add(fingering_copy);
+						}
+					}
+				}
+			}
+		}
+
+
+		/// <summary>
+		/// Evaluate feasibility of a (partial) fingering.
+		/// </summary>
+		/// <param name="fingering">Partial fingering.</param>
+		/// <param name="currentString">The last string which has been assigned a value.</param>
+		/// <returns></returns>
+		private bool isFeasible(int[] fingering, int currentString)
+		{
+			// take the finished subset of the fingering
+			int[] toCompare = fingering.Take(currentString + 1).ToArray();
+
+			// CONDITIONS
+			// max span 
+			if (maxSpan(toCompare) > MAX_SPAN)
+				return false; 
+
+			// ...possible expansion...
+
+			return true;
+		}
+
+
+		/// <summary>
+		/// Returns span of the fingering, i.e. max fret - min fret (discarding empty or muted strings).
+		/// </summary>
+		/// <param name="frets">Frets in the fingering.</param>
+		/// <returns></returns>
+		private int maxSpan(int[] frets)
+		{
+			List<int> nonzeroValues = frets.Where(x => x > 0).ToList();
+			return nonzeroValues.Count > 0 ? nonzeroValues.Max() - nonzeroValues.Min() : 0;
+		}
+
+		/// <summary>
+		/// Check if the fingering constructed for the given chord contains all the notes it should. 
+		/// If the chord contains more notes than can be feasibly played, some of them are omitted (according to a set of rules).
+		/// </summary>
+		/// <param name="chord">The chord to be checked against.</param>
+		/// <param name="fingering">The constructed fingering</param>
+		/// <returns></returns>
+		private bool containsAllNecessaryNotes(Chord chord, int[] fingering)
+		{
+			var notesInFingering = new HashSet<Note>();
+			for (int str = 0; str < fretboard.StringsCount; str++)
+			{
+				if (fingering[str] > -1)
+				{
+					notesInFingering.Add((Note)(((int)fretboard.GetTuning(str) + fingering[str]) % 12));
+				}
+			}
+
+			// deep copy the set of notes in the chord (it may be modified)
+			HashSet<Note> chordNotes = new HashSet<Note>(chord.Notes);
+
+			// if there are more notes in the chord than strings on the guitar, some can be omitted
+			if (chord.Notes.Count() >= fretboard.StringsCount)
+			{
+				 omitSuitableNotes(chord, chordNotes);
+			}
+
+			foreach (Note note in chordNotes)
+			{
+				if (!notesInFingering.Contains(note))
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+
+		/// <summary>
+		/// /// Removes the least important notes from the chord.
+		/// </summary>
+		/// <param name="chord">The chord to be reduced (will not be modified).</param>
+		/// <param name="chordNotes">The resulting reduced set of notes.</param>
+		private void omitSuitableNotes(Chord chord, HashSet<Note> chordNotes)
+		{
+			int omitted = 0;
+
+			// user can allow omission of the Root; however, it will only be carried out if the fifth is present
+			if ((chord.isRootOmissionAllowed()) && (chord.Fifth > 0))
+			{
+				chordNotes.Remove(chord.Root);
+				omitted++;
+			}
+
+			// perfect fifth can be omitted (if the root was not omitted)
+			if ((chord.Fifth == 2) && (chordNotes.Contains(chord.Root)))
+			{
+				chordNotes.Remove((Note)(((int)chord.Root + 7) % 12));
+				omitted++;
+			}
+
+			// perfect eleventh in thirteenth chord can be omitted
+			if ((chord.Thirteenth > 0) && (chord.Eleventh == 1))
+			{
+				chordNotes.Remove((Note)(((int)chord.Root + 5) % 12));
+				omitted++;
+			}
+
+			// major ninth in eleventh chord can be omitted
+			if ((chord.Eleventh > 0) && (chord.Ninth == 2))
+			{
+				chordNotes.Remove((Note)(((int)chord.Root + 2) % 12));
+				omitted++;
+			}
+			// major ninth in thirteenth chord can be omitted
+			if ((chord.Thirteenth > 0) && (chord.Ninth == 2))
+			{
+				chordNotes.Remove((Note)(((int)chord.Root + 2) % 12));
+				omitted++;
+			}
+		}
+
+		public List<int[]> sortFingerings(Chord chord, List<int[]> feasibleFingerings)
+		{
+			//kazdy prstoklad ohodnoti podle nastavenych kriterii a nasledne je seradi
+			List<Fingering> evaluatedFingerings = new List<Fingering>();
+
+			//uprava ratingu dle kriterii (pozn. rating = trestne body, cim vyssi tim hur)
+			foreach (var fingering in feasibleFingerings)
+			{
+				int penalty = 0;
+
+				//KRITERIA
+				//***********************************
+
+				//pozice na hmatniku
+				penalty += fingering.Max() * 10;
+
+				//pocet zatlumenych not
+				for (int i = 0; i < fingering.Length; i++)
+					if (fingering[i] == -1)
+						penalty++;
+
+				//pocet vynechanych not
+				List<int> containedInFingering = new List<int>();
+				for (int i = 0; i < fretboard.StringsCount; i++)
+				{
+					if ((containedInFingering.Contains((fingering[i] + (int)fretboard.GetTuning(i)) % 12) == false) && (fingering[i] > -1))
+					{
+						containedInFingering.Add((fingering[i] + (int)fretboard.GetTuning(i)) % 12);
+					}
+				}
+				penalty += (chord.Notes.Count - containedInFingering.Count) * 100; //silne kriterium
+
+				evaluatedFingerings.Add(new Fingering(fingering, penalty));
+			}
+
+			//setridi prstoklady podle ratingu
+			evaluatedFingerings.Sort(new Comparison<Fingering>(CompareFingerings));
+
+			List<int[]> sortedFingerings = new List<int[]>();
+			foreach (var item in evaluatedFingerings)
+				sortedFingerings.Add(item.FretsInFignering);
+			return sortedFingerings;
+		}
+
+		static int CompareFingerings(Fingering a, Fingering b)
+		{
+			return a.Penalty.CompareTo(b.Penalty);
+		}
+
+
+
+		private void btnFind_Click(object sender, EventArgs e)
+		{
+			findChordFingerings();
+		}
+
+		private void capoUpDown_ValueChanged(object sender, EventArgs e)
+		{
+			if (isPainting)
+				findChordFingerings();
+		}
+
+	}
+
+	/// <summary>
+	/// Class representing the guitar fretboard. 
+	/// </summary>
+	class Fretboard
     {
-        private const int MAX_FRET = 15;
-        private const int STRINGS_COUNT = 6;
-        public static int StringsCount
-        {
-            get { return STRINGS_COUNT; }
-        }
-        private static int[] tuning = new int[] { 4, 9, 2, 7, 11, 4 }; //default je standardni ladeni EADGHe
-        public static int GetTuning(int index)
+        int maxFret;
+		int stringsCount;
+		Note[] tuning;
+
+		public int StringsCount
+		{
+			get{ return stringsCount;} 
+		}
+
+		/// <summary>
+		/// Default constructor.
+		/// </summary>
+		/// <param name="maxFret">The highest (usable) fret on the fretboard.</param>
+		/// <param name="stringsCount">Number of strings.</param>
+		/// <param name="tuning"></param>
+		public Fretboard(int maxFret, int stringsCount, Note[] tuning){
+			this.maxFret = maxFret;
+			this.stringsCount = stringsCount;
+			this.tuning = tuning;
+		}
+
+        public Note GetTuning(int index)
         {
             return tuning[index];
         }
-        public static void SetTuning(int index, int value)
+        public void SetTuning(int index, Note value)
         {
             tuning[index] = value;
         }
 
-        public static List<List<int>> findNotesOnFretboard(List<int> notes)
+		/// <summary>
+		/// Returns a ragged list of all the locations of given notes on individual strings.
+		/// </summary>
+		/// <param name="notes">Notes to be searched for.</param>
+		/// <returns></returns>
+        public List<List<int>> findNotesOnFretboard(HashSet<Note> notes)
         {
-            //funkce dostane jako parametr seznam tonu v aktualnim akordu a vrati pozice tonu na 
-            //hmatniku v aktualnim ladeni ve formatu sestice Listu s pozicemi na kazde strune (v pripade sesti strun)
-
             List<List<int>> notesOnFretboard = new List<List<int>>();
 
-            for (int string_index = 0; string_index < STRINGS_COUNT; string_index++)
+            for (int str = 0; str < StringsCount; str++)
             {
                 notesOnFretboard.Add(new List<int>());
-                for (int fret = 0; fret < MAX_FRET; fret++)
+                for (int fret = 0; fret < maxFret; fret++)
                 {
-                    if (notes.Contains((tuning[string_index] + fret) % 12))
-                        notesOnFretboard[string_index].Add(fret);
+					Note currentNote = (Note)(((int)tuning[str] + fret) % 12);
+					if (notes.Contains(currentNote)){
+						notesOnFretboard[str].Add(fret);
+					}
                 }
             }
 
-            //pro prvni 2 struny je povoleno zatlumeni (-1) explicitne, u ostatnich jen pokud neexistuje hratelna pozice (osetreno dale)
+			// first two strings can be muted explicitly (others only if there is no other feasible solution (handled elsewhere))
             notesOnFretboard[0].Add(-1);
             notesOnFretboard[1].Add(-1);
 
@@ -635,14 +1031,16 @@ namespace GuitarChordFinder
         }
     }
 
-
-    public class ChordFormula
+	/// <summary>
+	/// Describes the chord skeleton (no absolute pitches, only relative stepwise distances)
+	/// </summary>
+    class ChordFormula
     {
-        //pomocna konstrukce implementujici schema akordu (ve smyslu intervalove sablony)
         private string name;
         public string Name { get { return name; } }
 
         private int third, fifth, seventh, ninth, eleventh, thirteenth;
+
         public int Third
         {
             get { return third; }
@@ -687,10 +1085,11 @@ namespace GuitarChordFinder
         }
     }
 
-
-    public class Fingering
+	/// <summary>
+	/// Simple data structure describing a specific fingering on a guitar together with its penalty score. 
+	/// </summary>
+    class Fingering
     {
-        //krome sestice tonu obsazenych v prstokladu obsahuje navic promennou 'penalizace' - tedy udrzuje hodnoceni daneho prstokladu
         private int[] fretsInFingering;
         public int[] FretsInFignering
         {
@@ -700,7 +1099,6 @@ namespace GuitarChordFinder
         public int Penalty
         {
             get { return penalty; }
-            set { penalty = value; }
         }
 
         public Fingering(int[] fretsInFingering, int penalty)
@@ -710,19 +1108,28 @@ namespace GuitarChordFinder
         }
     }
 
-
+	/// <summary>
+	/// Represents a chord.
+	/// </summary>
     public class Chord
     {
-        private const int MAX_SPAN = 3;
-
-        private List<int> notes;
-        public List<int> Notes
+        HashSet<Note> notes;
+        public HashSet<Note> Notes
         {
             get { return notes; }
             set { notes = value; }
         }
-        private int third, fifth, seventh, ninth, eleventh, thirteenth;
-        public int Third
+
+		
+		bool rootOmissionAllowed = false;
+		Note root, bass;
+		int third, fifth, seventh, ninth, eleventh, thirteenth;
+		public Note Root
+		{
+			get { return root; }
+			set { root = value; }
+		}
+		public int Third
         {
             get { return third; }
             set { third = value; }
@@ -752,15 +1159,26 @@ namespace GuitarChordFinder
             get { return thirteenth; }
             set { thirteenth = value; }
         }
-        public int Bass
+        public Note Bass
         {
             get { return bass; }
             set { bass = value; }
         }
-        private int root, bass;
-        private bool rootOmissionAllowed = false;
 
-        public Chord(List<int> notes, int root, int third, int fifth, int seventh, int ninth, int eleventh, int thirteenth, int bass, bool rootOmissionAllowed)
+		/// <summary>
+		/// Default constructor.
+		/// </summary>
+		/// <param name="notes">List of Notes present in the chord.</param>
+		/// <param name="root">Root note.</param>
+		/// <param name="third">Quality of third.</param>
+		/// <param name="fifth">Quality of fifth.</param>
+		/// <param name="seventh">Quality of seventh.</param>
+		/// <param name="ninth">Quality of ninth.</param>
+		/// <param name="eleventh">Quality of eleventh.</param>
+		/// <param name="thirteenth">Quality of thirteenth.</param>
+		/// <param name="bass">Bass note.</param>
+		/// <param name="rootOmissionAllowed">True if it is allowed to omit the root in the fingering.</param>
+		public Chord(HashSet<Note> notes, Note root, int third, int fifth, int seventh, int ninth, int eleventh, int thirteenth, Note bass, bool rootOmissionAllowed)
         {
             this.root = root;
             this.third = third;
@@ -774,353 +1192,8 @@ namespace GuitarChordFinder
             this.rootOmissionAllowed = rootOmissionAllowed;
         }
 
-        public string[] generateSymbols()
-        {
-            //pro kazdy ton od C po H vygeneruje "znacku" - zkratku pro jeho harmonickou funkci 
-            //v akordu, popr prazdny retezec pro tony, jez v akordu nejsou
-
-            string[] symbols = new string[12];
-
-            symbols[this.root] = "R";
-
-            //Obcas mohou tony kolidovat - v akordu muze byt napr. velka nona a zmensena tercie, coz je 
-            //ve skutecnosti tentyz ton. V takovem pripade znacka pro tercii prepise znacku pro nonu
-            //(proto se harmonicke funkce vyhodnocuji v tomto poradi).
-
-            switch (this.Ninth)
-            {
-                case 0: break;
-                case 1: symbols[(this.root + 1) % 12] = "9b";
-                    break;
-                case 2: symbols[(this.root + 2) % 12] = "9";
-                    break;
-                default:
-                    break;
-            }
-            switch (this.Eleventh)
-            {
-                case 0: break;
-                case 1: symbols[(this.root + 5) % 12] = "11";
-                    break;
-                case 2: symbols[(this.root + 6) % 12] = "11#";
-                    break;
-                default:
-                    break;
-            }
-            switch (this.Thirteenth)
-            {
-                case 0: break;
-                case 1: symbols[(this.root + 8) % 12] = "13b";
-                    break;
-                case 2: symbols[(this.root + 9) % 12] = "13";
-                    break;
-                default:
-                    break;
-            }
-            switch (this.Third)
-            {
-                case 0: break;
-                case 1: symbols[(this.root + 2) % 12] = "2";
-                    break;
-                case 2: symbols[(this.root + 3) % 12] = "m3";
-                    break;
-                case 3: symbols[(this.root + 4) % 12] = "3";
-                    break;
-                case 4: symbols[(this.root + 5) % 12] = "4";
-                    break;
-                default:
-                    break;
-            }
-            switch (this.Fifth)
-            {
-                case 0: break;
-                case 1: symbols[(this.root + 6) % 12] = "5b";
-                    break;
-                case 2: symbols[(this.root + 7) % 12] = "5";
-                    break;
-                case 3: symbols[(this.root + 8) % 12] = "5#";
-                    break;
-                default:
-                    break;
-            }
-            switch (this.Seventh)
-            {
-                case 0: break;
-                case 1: symbols[(this.root + 9) % 12] = "6";
-                    break;
-                case 2: symbols[(this.root + 10) % 12] = "7";
-                    break;
-                case 3: symbols[(this.root + 11) % 12] = "M7";
-                    break;
-                default:
-                    break;
-            }
-            if (symbols[this.Bass] == null)
-            {
-                //pokud je bas v tonu obsazen, nijak se neoznacuje, v opacnem pripade je mu pridelena vlastni znacka
-                symbols[this.Bass] = "(B)";
-            }
-
-            return symbols;
-        }
-
-        public List<int[]> findFingerings()
-        {
-            //budeme potrebovat pozice tonu na hmatniku, navic vsak take pozice basoveho tonu na hmatniku - potrebujeme ho hledat zvlast
-
-            List<List<int>> notesOnFretboard = Fretboard.findNotesOnFretboard(this.Notes);
-
-            //funkce NajdiTonyNaHmatniku bere jako argument List<int>, nemuzu predat pouze int (this.Bas), proto si pomuzeme jednoprvkovym Listem
-            List<int> basses = new List<int>() { this.Bass };
-
-            List<List<int>> bassesOnFretboard = Fretboard.findNotesOnFretboard(basses);
-
-            //inicializace promennych, ktere se budou rekurzivne predavat
-            int[] currentFingering = new int[Fretboard.StringsCount];
-            List<int[]> fingerings = new List<int[]>();
-            int bassOnString = 0;
-
-            //zavolani rekurzivni funkce s referencne predavanymi parametry
-            nextString(ref notesOnFretboard, ref bassesOnFretboard, ref bassOnString, ref fingerings, 0, ref currentFingering);
-            return fingerings;
-        }
-
-        private void nextString(ref List<List<int>> notesOnFretboard, ref List<List<int>> bassesOnFretboard, ref int bassOnString, ref List<int[]> fingerings, int currentString, ref int[] currentFingering)
-        {
-            List<List<int>> onFretboard = notesOnFretboard;
-
-            //funkce nejprve hleda pouze bas a az po jeho uspesnem nalezeni "prepne" na hledani ostatnich tonu
-            if (bassOnString == currentString)
-                onFretboard = bassesOnFretboard;
-
-            bool found = false;
-            for (int i = 0; i < onFretboard[currentString].Count() + 1; i++)
-            {
-                // jeden cyklus navic pro pripad, ze nebyla nalezena vhodna pozice na aktualni strune - tj. 
-                // ve vhodne vzdalenosti - v takovem pripade je povoleno zatlumeni struny (pozn.: pro prvni dve struny
-                //je zatlumeni povoleno defaultne)
-                if (i == onFretboard[currentString].Count())
-                {
-                    if (found == false)
-                    {
-                        currentFingering[currentString] = -1;
-                        if (bassOnString == currentString)
-                        {
-                            //pokud se hledal bas a nenasel se, jeho hledani se presouva na dalsi strunu
-                            bassOnString = currentString + 1;
-                        }
-                    }
-                    else
-                    { break; }
-                }
-                else
-                {
-                    //pridame do prstokladu na aktualni pozici vybrany ton
-                    currentFingering[currentString] = onFretboard[currentString][i];
-
-                    if (currentFingering[currentString] == -1)
-                    {
-                        //nasel se vhodny ton, ale je to -1 tzn. zatlumena nota - hledani basu se presouva o strunu vys
-                        //toto nastane pouze u prvnich dvou strun, kde je zatlumeni povoleno explicitne, u ostatnich jen
-                        //v pripade, ktery je osetren o par radek vyse
-                        if (bassOnString == currentString)
-                        {
-                        bassOnString = currentString + 1;
-                        }
-                    }
-                }
-
-                if (isFeasible(currentFingering, currentString))
-                // prorezavani stromu - v prohledavani vetve se pokracuje
-                //jen tehdy, pokud akord stale jeste dava smysl
-                {
-                    found = true;
-                    if (currentString < Fretboard.StringsCount - 1)
-                    {
-                        //rekurzivni volani funkce pro dalsi strunu
-                        nextString(ref notesOnFretboard, ref bassesOnFretboard, ref bassOnString, ref fingerings, currentString + 1, ref currentFingering);
-                    }
-                    else
-                    //posledni struna, nasli jsme smysluplny prstoklad
-                    {
-                        //test na obsazeni vsech tonu akordu
-                        if (containsAllNecessaryNotes(currentFingering))
-                        {
-                            //pridani tonu do seznamu prstokladu
-                            int[] fingering_copy = new int[Fretboard.StringsCount]; //nemohu pridat referencne predavanou prommenou, musim vytvorit kopii
-                            for (int j = 0; j < Fretboard.StringsCount; j++)
-                                { fingering_copy[j] = currentFingering[j]; }
-                            
-                            fingerings.Add(fingering_copy);
-                        }
-                    }
-                }
-            }
-        }
-
-        private bool isFeasible(int[] fingering, int currentString)
-        {
-            //funkce vyhodnoti smysluplnost (castecneho) akordu
-            int[] toCompare = new int[currentString + 1];
-            if (currentString + 1 == fingering.Length)
-            { 
-                toCompare = fingering; 
-            }
-            else
-            {
-                for (int i = 0; i <= currentString; i++)
-                {
-                    //vyber relevantnich tonu z castecneho akordu
-                    toCompare[i] = fingering[i];   
-                }
-            }
-
-
-            //podminky (zatim jen jedna, moznost rozsireni - napady: akord ma obsahovat jeste ctyri dalsi ruzne tony, zbyvaji uz vsak jen tri struny)
-            if (maxSpan(toCompare) > MAX_SPAN) { return false; }
-
-            return true;
-        }
-
-        private int maxSpan(int[] notes)
-        {
-            //Funkce vraci meximalni vzdalenost tonu na hmatniku, tj. maximalni pocet prazcu, 
-            //pres ktere by bylo treba roztahnout prsty.
-            List<int> nonzeroValues = new List<int>();
-            for (int i = 0; i < notes.Length; i++)
-            {
-                //prazdne a zatlumene struny nas nezajimaji
-                if (notes[i] > 0)
-                { nonzeroValues.Add(notes[i]); }
-            }
-            try
-            { 
-                return nonzeroValues.Max() - nonzeroValues.Min(); 
-            }
-            catch (Exception)
-            {
-                return 0;
-                // vyjimka pro osetreni prazdneho pole BezNul - tj. v akordu jsou same prazdne a zatlumene struny
-            }
-        }
-
-        private bool containsAllNecessaryNotes(int[] fingering)
-        {
-            //osetri kompletni prstoklad pred vlozenim do seznamu - zkouma tonovou kompletnost
-
-            List<int> notesInFingering = new List<int>();
-            for (int i = 0; i < Fretboard.StringsCount; i++)
-            {
-                if ((fingering[i] > -1) && (notesInFingering.Contains((Fretboard.GetTuning(i) + fingering[i]) % 12) == false))
-                { notesInFingering.Add((Fretboard.GetTuning(i) + fingering[i]) % 12); }
-            }
-
-            Chord currentChord = this;
-
-            //osetreni pripadu, kdy je v akordu vice tonu nez je pocet strun (napr. tercdecimove akordy obsahuji v plnem tvaru 7 tonu)
-            if (currentChord.Notes.Count() >= Fretboard.StringsCount)
-            {
-                currentChord.omitSuitableNotes();
-            }
-
-            for (int i = 0; i < currentChord.Notes.Count(); i++)
-            {
-                if (notesInFingering.Contains(currentChord.Notes[i]) == false)
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        private void omitSuitableNotes()
-        {
-            //u "velkych" akordu povolujeme vypusteni nekterych tonu, avsak podle urcitych pravidel
-
-            int omitted = 0;
-
-            //uzivatelsky nastavena moznost vynechani rootu - ale jen pokud akord neni bez kvinty
-            if ((rootOmissionAllowed) && (this.Fifth > 0))
-            {
-                this.Notes.Remove(this.root);
-                omitted++;
-            }
-
-            //cistou kvintu muzu vynechat kdykoliv (pokud jsem jiz nevynechal root)
-            if ((this.Fifth == 2) && (this.Notes.Contains(this.root)))
-            {
-                this.Notes.Remove((this.root + 7) % 12);
-                omitted++;
-            }
-
-            //cistou undecimu v 13 muzu vynechat
-            if ((this.Thirteenth > 0) && (this.Eleventh == 1))
-            {
-                this.Notes.Remove((this.root + 5) % 12);
-                omitted++;
-            }
-
-            //cistou devitku v 11 muzu vynechat
-            if ((this.Eleventh > 0) && (this.Ninth == 2))
-            {
-                this.Notes.Remove((this.root + 2) % 12);
-                omitted++;
-            }
-            //cistou devitku v 13 muzu vynechat
-            if ((this.Thirteenth > 0) && (this.Ninth == 2))
-            {
-                this.Notes.Remove((this.root + 2) % 12);
-                omitted++;
-            }
-
-        }
-
-        public List<int[]> evaluateFingerings(ref List<int[]> feasibleFingerings)
-        {
-            //kazdy prstoklad ohodnoti podle nastavenych kriterii a nasledne je seradi
-            List<Fingering> evaluatedFingerings = new List<Fingering>();
-            
-            //uprava ratingu dle kriterii (pozn. rating = trestne body, cim vyssi tim hur)
-            foreach (var fingering in feasibleFingerings)
-            {
-                int penalty = 0;
-
-                //KRITERIA
-                //***********************************
-
-                //pozice na hmatniku
-                penalty += fingering.Max() * 10;
-
-                //pocet zatlumenych not
-                for (int i = 0; i < fingering.Length; i++)
-                    if (fingering[i] == -1)
-                        penalty++;
-
-                //pocet vynechanych not
-                List<int> containedInFingering = new List<int>();
-                for (int i = 0; i < Fretboard.StringsCount; i++)
-                {
-                    if ((containedInFingering.Contains((fingering[i] + Fretboard.GetTuning(i)) % 12) == false) && (fingering[i] > -1))
-                    {
-                        containedInFingering.Add((fingering[i] + Fretboard.GetTuning(i)) % 12);
-                    }
-                }
-                penalty += (this.Notes.Count - containedInFingering.Count)*100; //silne kriterium
-
-                evaluatedFingerings.Add(new Fingering(fingering, penalty));
-            }
-
-            //setridi prstoklady podle ratingu
-            evaluatedFingerings.Sort(new Comparison<Fingering>(CompareFingerings));
-            List<int[]> sortedFingerings = new List<int[]>();
-            foreach (var item in evaluatedFingerings)
-                sortedFingerings.Add(item.FretsInFignering);
-            return sortedFingerings;
-        }
-
-        static int CompareFingerings(Fingering a, Fingering b)
-        {
-            return a.Penalty.CompareTo(b.Penalty);
-        }
+		public bool isRootOmissionAllowed() {
+			return rootOmissionAllowed;
+		}    
     }
 }
