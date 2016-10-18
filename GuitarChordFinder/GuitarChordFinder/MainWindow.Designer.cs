@@ -1,7 +1,7 @@
 ﻿
 namespace GuitarChordFinder
 {
-    partial class GuitarChordFinder
+    partial class GuitarChordFinderGUI
     {
         /// <summary>
         /// Required designer variable.
@@ -269,9 +269,9 @@ namespace GuitarChordFinder
 			this.comboFifth.FormattingEnabled = true;
 			this.comboFifth.Items.AddRange(new object[] {
             "---",
-            "zmenšená",
-            "čistá",
-            "zvětšená"});
+            "diminished",
+            "perfect",
+            "augmented"});
 			this.comboFifth.Location = new System.Drawing.Point(92, 52);
 			this.comboFifth.Margin = new System.Windows.Forms.Padding(4);
 			this.comboFifth.Name = "comboFifth";
@@ -284,9 +284,9 @@ namespace GuitarChordFinder
 			this.comboSeventh.FormattingEnabled = true;
 			this.comboSeventh.Items.AddRange(new object[] {
             "---",
-            "zmenšená",
-            "malá",
-            "velká"});
+            "diminished",
+            "minor",
+            "major"});
 			this.comboSeventh.Location = new System.Drawing.Point(92, 85);
 			this.comboSeventh.Margin = new System.Windows.Forms.Padding(4);
 			this.comboSeventh.Name = "comboSeventh";
@@ -299,8 +299,8 @@ namespace GuitarChordFinder
 			this.comboNinth.FormattingEnabled = true;
 			this.comboNinth.Items.AddRange(new object[] {
             "---",
-            "malá",
-            "velká"});
+            "minor",
+            "major"});
 			this.comboNinth.Location = new System.Drawing.Point(92, 118);
 			this.comboNinth.Margin = new System.Windows.Forms.Padding(4);
 			this.comboNinth.Name = "comboNinth";
@@ -313,8 +313,8 @@ namespace GuitarChordFinder
 			this.comboEleventh.FormattingEnabled = true;
 			this.comboEleventh.Items.AddRange(new object[] {
             "---",
-            "čistá",
-            "zvětšená"});
+            "perfect",
+            "augmented"});
 			this.comboEleventh.Location = new System.Drawing.Point(92, 151);
 			this.comboEleventh.Margin = new System.Windows.Forms.Padding(4);
 			this.comboEleventh.Name = "comboEleventh";
@@ -327,8 +327,8 @@ namespace GuitarChordFinder
 			this.comboThirteenth.FormattingEnabled = true;
 			this.comboThirteenth.Items.AddRange(new object[] {
             "---",
-            "malá",
-            "velká"});
+            "minor",
+            "major"});
 			this.comboThirteenth.Location = new System.Drawing.Point(92, 185);
 			this.comboThirteenth.Margin = new System.Windows.Forms.Padding(4);
 			this.comboThirteenth.Name = "comboThirteenth";
@@ -401,10 +401,10 @@ namespace GuitarChordFinder
 			this.comboThird.FormattingEnabled = true;
 			this.comboThird.Items.AddRange(new object[] {
             "---",
-            "zmenšená",
-            "malá",
-            "velká",
-            "zvětšená"});
+            "dimished",
+            "minor",
+            "major",
+            "augmented"});
 			this.comboThird.Location = new System.Drawing.Point(92, 18);
 			this.comboThird.Margin = new System.Windows.Forms.Padding(4);
 			this.comboThird.Name = "comboThird";
@@ -1034,7 +1034,7 @@ namespace GuitarChordFinder
 			this.Controls.Add(this.output);
 			this.Margin = new System.Windows.Forms.Padding(4);
 			this.Name = "GuitarChordFinder";
-			this.Text = "Generátor kytarových akordů";
+			this.Text = "Guitar chord finder";
 			this.panel1.ResumeLayout(false);
 			this.panel1.PerformLayout();
 			this.groupChordStructure.ResumeLayout(false);

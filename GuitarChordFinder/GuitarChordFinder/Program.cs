@@ -15,7 +15,7 @@ namespace GuitarChordFinder
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new GuitarChordFinder());
+            Application.Run(new GuitarChordFinderGUI());
         }
     }
 }
